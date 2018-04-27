@@ -40,13 +40,13 @@ class SNMPAutoload(object):
                                         name=resource_name,
                                         unique_id=resource_name)
 
-    def load_cisco_mib(self):
-        """
-        Loads Cisco specific mibs inside snmp handler
-
-        """
-        path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mibs"))
-        self.snmp_handler.update_mib_sources(path)
+    # def load_cisco_mib(self):
+    #     """
+    #     Loads Cisco specific mibs inside snmp handler
+    #
+    #     """
+    #     path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mibs"))
+    #     self.snmp_handler.update_mib_sources(path)
 
     def discover(self, supported_os):
         """General entry point for autoload,
@@ -61,16 +61,16 @@ class SNMPAutoload(object):
         self.logger.info("*" * 70)
         self.logger.info("Start SNMP discovery process .....")
 
-        self.load_cisco_mib()
+        # self.load_cisco_mib()
         # self.snmp_handler.load_mib(["CISCO-PRODUCTS-MIB", "CISCO-ENTITY-VENDORTYPE-OID-MIB"])
         self._get_device_details()
         self._load_snmp_tables()
 
-        if self.cisco_entity.chassis_list:
-            self._get_chassis_attributes(self.cisco_entity.chassis_list)
-            self._get_power_ports(self.cisco_entity.power_port_list)
-            self._get_module_attributes(self.cisco_entity.module_list)
-            self._get_ports_attributes(self.cisco_entity.port_list)
+        if self.ftos_entity.chassis_list:
+            self._get_chassis_attributes(self.ftos_entity.chassis_list)
+            self._get_power_ports(self.ftos_entity.power_port_list)
+            self._get_module_attributes(self.ftos_entity.module_list)
+            self._get_ports_attributes(self.ftos_entity.port_list)
             self._get_port_channels()
         else:
             self.logger.error("Entity table error, no chassis found")
@@ -161,7 +161,7 @@ class SNMPAutoload(object):
         """ Get root element attributes """
 
         self.logger.info("Building Root")
-        vendor = "Cisco"
+        vendor = "Dell"
 
         self.resource.contact_name = self.snmp_handler.get_property('SNMPv2-MIB', 'sysContact', '0')
         self.resource.system_name = self.snmp_handler.get_property('SNMPv2-MIB', 'sysName', '0')
@@ -172,16 +172,15 @@ class SNMPAutoload(object):
         self.resource.vendor = vendor
 
     def _load_snmp_tables(self):
-        """ Load all cisco required snmp tables
-
+        """Load required snmp tables
         :return:
         """
 
         self.logger.info('Start loading MIB tables:')
         self.if_table = SnmpIfTable(snmp_handler=self.snmp_handler, logger=self.logger)
         self.logger.info('{0} table loaded'.format(self.IF_ENTITY))
-        self.cisco_entity = SNMPEntityTable(self.snmp_handler, self.logger, self.if_table)
-        self.entity_table = self.cisco_entity.get_entity_table()
+        self.ftos_entity = SNMPEntityTable(self.snmp_handler, self.logger, self.if_table)
+        self.entity_table = self.ftos_entity.get_entity_table()
         self.logger.info('Entity table loaded')
 
         self.logger.info('MIB Tables loaded successfully')
@@ -213,7 +212,7 @@ class SNMPAutoload(object):
 
         self.logger.info("Building Chassis")
         for chassis in chassis_list:
-            chassis_id = self.cisco_entity.relative_address[chassis]
+            chassis_id = self.ftos_entity.relative_address[chassis]
 
             chassis_object = GenericChassis(shell_name=self.shell_name,
                                             name="Chassis {}".format(chassis_id),
@@ -235,7 +234,7 @@ class SNMPAutoload(object):
 
         self.logger.info("Building Modules")
         for module in module_list:
-            module_id = self.cisco_entity.relative_address.get(module)
+            module_id = self.ftos_entity.relative_address.get(module)
             if not module_id:
                 continue
 
@@ -270,7 +269,7 @@ class SNMPAutoload(object):
         for port in power_supply_list:
             port_id = self.entity_table[port]["entPhysicalParentRelPos"]
             parent_index = int(self.entity_table[port]["entPhysicalContainedIn"])
-            chassis_id = self.cisco_entity.get_relative_address(parent_index)
+            chassis_id = self.ftos_entity.get_relative_address(parent_index)
             relative_address = "{0}/PP{1}".format(chassis_id, port_id)
 
             power_port = GenericPowerPort(shell_name=self.shell_name,
@@ -333,7 +332,7 @@ class SNMPAutoload(object):
 
         self.logger.info("Load Ports:")
         for port in port_list:
-            port_if_entity = self.cisco_entity.port_mapping.get(port)
+            port_if_entity = self.ftos_entity.port_mapping.get(port)
             if not port_if_entity:
                 continue
             interface_name = port_if_entity.if_name or self.entity_table[port]['entPhysicalName']
@@ -355,7 +354,7 @@ class SNMPAutoload(object):
             port_object.auto_negotiation = port_if_entity.auto_negotiation
             port_object.mac_address = port_if_entity.if_mac
 
-            self._add_element(relative_path=self.cisco_entity.relative_address[port], resource=port_object)
+            self._add_element(relative_path=self.ftos_entity.relative_address[port], resource=port_object)
             self.logger.info("Added " + interface_name + " Port")
 
         self.logger.info("Building Ports completed")
