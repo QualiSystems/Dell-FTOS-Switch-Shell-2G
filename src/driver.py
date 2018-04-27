@@ -1,24 +1,28 @@
-import datetime
-import json
-
-from cloudshell.networking.apply_connectivity.apply_connectivity_operation import apply_connectivity_changes
-from cloudshell.networking.apply_connectivity.models.connectivity_result import ConnectivitySuccessResponse
-from cloudshell.shell.core.interfaces.save_restore import OrchestrationSaveResult, OrchestrationSavedArtifact, \
-    OrchestrationSavedArtifactInfo, OrchestrationRestoreRules
+from cloudshell.devices.driver_helper import get_logger_with_thread_id, get_api, get_cli
+from cloudshell.devices.standards.networking.configuration_attributes_structure import \
+    create_networking_resource_from_context
+from cloudshell.networking.networking_resource_driver_interface import NetworkingResourceDriverInterface
+from cloudshell.shell.core.driver_context import InitCommandContext, ResourceCommandContext, AutoLoadDetails, \
+    CancellationContext
+from cloudshell.shell.core.driver_utils import GlobalLock
+from cloudshell.shell.core.interfaces.save_restore import OrchestrationSaveResult
 from cloudshell.shell.core.resource_driver_interface import ResourceDriverInterface
-from cloudshell.shell.core.driver_context import InitCommandContext, ResourceCommandContext, AutoLoadResource, \
-    AutoLoadAttribute, AutoLoadDetails, CancellationContext
+# from data_model import *  # run 'shellfoundry generate' to generate data model classes
+from ftos.cli.ftos_cli_handler import FTOSCliHandler
+from ftos.runners.ftos_autoload_runner import FTOSAutoloadRunner
+from ftos.snmp.ftos_snmp_handler import FTOSSnmpHandler
 
 
-#from data_model import *  # run 'shellfoundry generate' to generate data model classes
-
-class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
+class DellFtosSwitchShell2GDriver(ResourceDriverInterface, NetworkingResourceDriverInterface, GlobalLock):
+    SUPPORTED_OS = [r"dell.+os"]
+    SHELL_NAME = "Dell FTOS Switch 2G"
 
     def __init__(self):
         """
         ctor must be without arguments, it is created with reflection at run time
         """
-        pass
+        super(DellFtosSwitchShell2GDriver, self).__init__()
+        self._cli = None
 
     def initialize(self, context):
         """
@@ -26,10 +30,16 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         This is a good place to load and cache the driver configuration, initiate sessions etc.
         :param InitCommandContext context: the context the command runs on
         """
-        pass
+        resource_config = create_networking_resource_from_context(shell_name=self.SHELL_NAME,
+                                                                  supported_os=self.SUPPORTED_OS,
+                                                                  context=context)
+
+        session_pool_size = int(resource_config.sessions_concurrency_limit)
+        self._cli = get_cli(session_pool_size)
+        return 'Finished initializing'
 
     # <editor-fold desc="Networking Standard Commands">
-    def restore(self, context, cancellation_context, path, configuration_type, restore_method, vrf_management_name):
+    def restore(self, context, path, configuration_type, restore_method, vrf_management_name):
         """
         Restores a configuration file
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -41,7 +51,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         """
         pass
 
-    def save(self, context, cancellation_context, folder_path, configuration_type, vrf_management_name):
+    def save(self, context, folder_path, configuration_type, vrf_management_name):
         """
         Creates a configuration file and saves it to the provided destination
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -54,7 +64,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         """
         pass
 
-    def load_firmware(self, context, cancellation_context, path, vrf_management_name):
+    def load_firmware(self, context, path, vrf_management_name):
         """
         Upload and updates firmware on the resource
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -63,7 +73,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         """
         pass
 
-    def run_custom_command(self, context, cancellation_context, custom_command):
+    def run_custom_command(self, context, custom_command):
         """
         Executes a custom command on the device
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -74,7 +84,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         """
         pass
 
-    def run_custom_config_command(self, context, cancellation_context, custom_command):
+    def run_custom_config_command(self, context, custom_command):
         """
         Executes a custom command on the device in configuration mode
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -85,7 +95,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         """
         pass
 
-    def shutdown(self, context, cancellation_context):
+    def shutdown(self, context):
         """
         Sends a graceful shutdown to the device
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -96,7 +106,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
     # </editor-fold>
 
     # <editor-fold desc="Orchestration Save and Restore Standard">
-    def orchestration_save(self, context, cancellation_context, mode, custom_params):
+    def orchestration_save(self, context, mode, custom_params):
         """
         Saves the Shell state and returns a description of the saved artifacts and information
         This command is intended for API use only by sandbox orchestration scripts to implement
@@ -139,7 +149,7 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         '''
         pass
 
-    def orchestration_restore(self, context, cancellation_context, saved_artifact_info, custom_params):
+    def orchestration_restore(self, context, saved_artifact_info, custom_params):
         """
         Restores a saved artifact previously saved by this Shell driver using the orchestration_save function
         :param ResourceCommandContext context: The context object for the command with resource and reservation info
@@ -195,6 +205,9 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
 
     '''
 
+    def ApplyConnectivityChanges(self, context, request):
+        pass
+
     # </editor-fold>
 
     # <editor-fold desc="Discovery">
@@ -207,39 +220,24 @@ class DellFtosSwitchShell2GDriver (ResourceDriverInterface):
         :rtype: AutoLoadDetails
         """
 
-        # See below some example code demonstrating how to return the resource structure and attributes
-        # In real life, this code will be preceded by SNMP/other calls to the resource details and will not be static
-        # run 'shellfoundry generate' in order to create classes that represent your data model
+        logger = get_logger_with_thread_id(context)
+        api = get_api(context)
 
-        '''
-        resource = DellFtosSwitchShell2G.create_from_context(context)
-        resource.vendor = 'specify the shell vendor'
-        resource.model = 'specify the shell model'
+        resource_config = create_networking_resource_from_context(shell_name=self.SHELL_NAME,
+                                                                  supported_os=self.SUPPORTED_OS,
+                                                                  context=context)
+        cli_handler = FTOSCliHandler(self._cli, resource_config, logger, api)
+        snmp_handler = FTOSSnmpHandler(resource_config, logger, api, cli_handler)
 
-        chassis1 = GenericChassis('Chassis 1')
-        chassis1.model = 'WS-X4232-GB-RJ'
-        chassis1.serial_number = 'JAE053002JD'
-        resource.add_sub_resource('1', chassis1)
+        autoload_operations = FTOSAutoloadRunner(logger=logger,
+                                             resource_config=resource_config,
+                                             snmp_handler=snmp_handler)
+        logger.info('Autoload started')
+        response = autoload_operations.discover()
+        logger.info('Autoload completed')
+        return response
 
-        module1 = GenericModule('Module 1')
-        module1.model = 'WS-X5561-GB-AB'
-        module1.serial_number = 'TGA053972JD'
-        chassis1.add_sub_resource('1', module1)
-
-        port1 = GenericPort('Port 1')
-        port1.mac_address = 'fe80::e10c:f055:f7f1:bb7t16'
-        port1.ipv4_address = '192.168.10.7'
-        module1.add_sub_resource('1', port1)
-
-        return resource.create_autoload_details()
-        '''
-        return AutoLoadDetails([], [])
-
-    # </editor-fold>
-
-    # <editor-fold desc="Health Check">
-
-    def health_check(self,cancellation_context):
+    def health_check(self, cancellation_context):
         """
         Checks if the device is up and connectable
         :return: str: Success or fail message
