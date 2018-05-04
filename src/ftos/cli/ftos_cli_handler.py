@@ -70,3 +70,12 @@ class FTOSCliHandler(CliHandlerImpl):
         cli_service.send_command("terminal no exec prompt timestamp", EnableCommandMode.PROMPT)
         with cli_service.enter_mode(self.config_mode) as config_session:
             config_session.send_command("no logging console", ConfigCommandMode.PROMPT)
+
+    def default_mode_session(self):
+        return self.get_cli_service(self.default_mode)
+
+    def enable_mode_session(self):
+        return self.get_cli_service(self.enable_mode)
+
+    def config_mode_session(self):
+        return self.get_cli_service(self.config_mode)

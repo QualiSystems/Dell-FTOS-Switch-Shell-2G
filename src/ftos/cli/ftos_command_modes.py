@@ -9,7 +9,7 @@ from cloudshell.cli.command_mode import CommandMode
 
 
 class DefaultCommandMode(CommandMode):
-    PROMPT = r'>\s*$'
+    PROMPT = r'^.+>\s*$'
     ENTER_COMMAND = ''
     EXIT_COMMAND = ''
 
@@ -46,7 +46,7 @@ class DefaultCommandMode(CommandMode):
 
 
 class EnableCommandMode(CommandMode):
-    PROMPT = r'(?:(?!\)).)#\s*$'
+    PROMPT = r'^.+#\s*$'
     ENTER_COMMAND = 'enable'
     EXIT_COMMAND = ''
 
@@ -93,7 +93,7 @@ class EnableCommandMode(CommandMode):
 class ConfigCommandMode(CommandMode):
     MAX_ENTER_CONFIG_MODE_RETRIES = 5
     ENTER_CONFIG_RETRY_TIMEOUT = 5
-    PROMPT = r'\(config.*\)#\s*$'
+    PROMPT = r'^.*\(conf.*\)#\s*$'
     ENTER_COMMAND = 'configure terminal'
     EXIT_COMMAND = "exit"
     ENTER_ACTION_COMMANDS = []

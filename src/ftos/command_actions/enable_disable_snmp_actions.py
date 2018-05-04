@@ -1,26 +1,30 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import re
 
-from cloudshell.cli.cli_service_impl import CliServiceImpl as CliService
 from cloudshell.cli.command_template.command_template_executor import CommandTemplateExecutor
 import ftos.command_templates.enable_disable_snmp as enable_disable_snmp
+from ftos.cli.ftos_command_modes import EnableCommandMode, ConfigCommandMode
 
 
 class EnableDisableSnmpActions(object):
     READ_ONLY = "ro"
     READ_WRITE = "rw"
 
-    def __init__(self, cli_service, logger):
+    def __init__(self, cli_service, config_mode, logger):
         """
         Reboot actions
         :param cli_service: config mode cli service
-        :type cli_service: CliService
+        :type cli_service: cloudshell.cli.cli_service_impl.CliServiceImpl
         :param logger:
         :type logger: Logger
         :return:
         """
+        if not isinstance(cli_service.command_mode, EnableCommandMode):
+            raise TypeError(self.__class__.__name__, 'Incorrect cli service command mode')
         self._cli_service = cli_service
         self._logger = logger
+        self._config_mode = config_mode
 
     def get_current_snmp_communities(self, action_map=None, error_map=None):
         """Retrieve current snmp communities
@@ -48,7 +52,7 @@ class EnableDisableSnmpActions(object):
                                        action_map=action_map,
                                        error_map=error_map).execute_command()
 
-    def get_current_snmp_user(self, action_map=None, error_map=None):
+    def get_snmp_users(self, action_map=None, error_map=None):
         """Retrieve current snmp communities
 
         :param action_map: actions will be taken during executing commands, i.e. handles yes/no prompts
@@ -56,10 +60,11 @@ class EnableDisableSnmpActions(object):
         :return:
         """
 
-        return CommandTemplateExecutor(cli_service=self._cli_service,
-                                       command_template=enable_disable_snmp.SHOW_SNMP_USER,
-                                       action_map=action_map,
-                                       error_map=error_map).execute_command()
+        output = CommandTemplateExecutor(cli_service=self._cli_service,
+                                         command_template=enable_disable_snmp.SHOW_SNMP_USERS,
+                                         action_map=action_map,
+                                         error_map=error_map).execute_command()
+        return re.findall(r'^user\sname\s*:\s*(\w+)\s*$', output, flags=re.IGNORECASE | re.MULTILINE)
 
     def enable_snmp(self, snmp_community, is_read_only_community=True, action_map=None, error_map=None):
         """Enable SNMP on the device
@@ -86,10 +91,11 @@ class EnableDisableSnmpActions(object):
         :param error_map: errors will be raised during executing commands, i.e. handles Invalid Commands errors
         """
 
-        return CommandTemplateExecutor(cli_service=self._cli_service,
-                                       command_template=enable_disable_snmp.ENABLE_SNMP_VIEW,
-                                       action_map=action_map,
-                                       error_map=error_map).execute_command(snmp_view=snmp_view)
+        with self._cli_service.enter_mode(self._config_mode) as config_mode_service:
+            return CommandTemplateExecutor(cli_service=config_mode_service,
+                                           command_template=enable_disable_snmp.ENABLE_SNMP_VIEW,
+                                           action_map=action_map,
+                                           error_map=error_map).execute_command(snmp_view=snmp_view)
 
     def enable_snmp_group(self, snmp_group, snmp_view, action_map=None, error_map=None):
         """Enable SNMP group on the device
@@ -100,13 +106,16 @@ class EnableDisableSnmpActions(object):
         :param error_map: errors will be raised during executing commands, i.e. handles Invalid Commands errors
         """
 
-        return CommandTemplateExecutor(cli_service=self._cli_service,
-                                       command_template=enable_disable_snmp.ENABLE_SNMP_GROUP,
-                                       action_map=action_map,
-                                       error_map=error_map).execute_command(snmp_group=snmp_group, snmp_view=snmp_view)
+        with self._cli_service.enter_mode(self._config_mode) as config_mode_service:
+            return CommandTemplateExecutor(cli_service=config_mode_service,
+                                           command_template=enable_disable_snmp.ENABLE_SNMP_GROUP,
+                                           action_map=action_map,
+                                           error_map=error_map).execute_command(snmp_group=snmp_group,
+                                                                                snmp_view=snmp_view)
 
     def enable_snmp_v3(self, snmp_user, snmp_password, auth_protocol, snmp_priv_key, priv_protocol, snmp_group,
                        action_map=None, error_map=None):
+
         """Enable SNMP user on the device
 
         :param snmp_user: snmp user
@@ -117,26 +126,27 @@ class EnableDisableSnmpActions(object):
         :param error_map: errors will be raised during executing commands, i.e. handles Invalid Commands errors
         """
 
-        if snmp_group:
-            result = CommandTemplateExecutor(cli_service=self._cli_service,
-                                             command_template=enable_disable_snmp.ENABLE_SNMP_V3_WITH_GROUP,
-                                             action_map=action_map,
-                                             error_map=error_map).execute_command(snmp_user=snmp_user,
-                                                                                  snmp_password=snmp_password,
-                                                                                  auth_protocol=auth_protocol,
-                                                                                  snmp_priv_key=snmp_priv_key,
-                                                                                  priv_protocol=priv_protocol,
-                                                                                  snmp_group=snmp_group)
-        else:
-            result = CommandTemplateExecutor(cli_service=self._cli_service,
-                                             command_template=enable_disable_snmp.ENABLE_SNMP_USER,
-                                             action_map=action_map,
-                                             error_map=error_map).execute_command(snmp_user=snmp_user,
-                                                                                  snmp_password=snmp_password,
-                                                                                  auth_protocol=auth_protocol,
-                                                                                  snmp_priv_key=snmp_priv_key,
-                                                                                  priv_protocol=priv_protocol)
-        return result
+        with self._cli_service.enter_mode(self._config_mode) as config_mode_service:
+            if snmp_group:
+                result = CommandTemplateExecutor(cli_service=config_mode_service,
+                                                 command_template=enable_disable_snmp.ENABLE_SNMP_V3_WITH_GROUP,
+                                                 action_map=action_map,
+                                                 error_map=error_map).execute_command(snmp_user=snmp_user,
+                                                                                      snmp_password=snmp_password,
+                                                                                      auth_protocol=auth_protocol,
+                                                                                      snmp_priv_key=snmp_priv_key,
+                                                                                      priv_protocol=priv_protocol,
+                                                                                      snmp_group=snmp_group)
+            else:
+                result = CommandTemplateExecutor(cli_service=config_mode_service,
+                                                 command_template=enable_disable_snmp.ENABLE_SNMP_USER,
+                                                 action_map=action_map,
+                                                 error_map=error_map).execute_command(snmp_user=snmp_user,
+                                                                                      snmp_password=snmp_password,
+                                                                                      auth_protocol=auth_protocol,
+                                                                                      snmp_priv_key=snmp_priv_key,
+                                                                                      priv_protocol=priv_protocol)
+            return result
 
     def disable_snmp(self, snmp_community, action_map=None, error_map=None):
         """Disable SNMP community on the device
@@ -184,6 +194,7 @@ class EnableDisableSnmpActions(object):
         :param action_map: actions will be taken during executing commands, i.e. handles yes/no prompts
         :param error_map: errors will be raised during executing commands, i.e. handles Invalid Commands errors
         """
+
         if snmp_group:
             result = CommandTemplateExecutor(cli_service=self._cli_service,
                                              command_template=enable_disable_snmp.DISABLE_SNMP_USER_WITH_GROUP,
