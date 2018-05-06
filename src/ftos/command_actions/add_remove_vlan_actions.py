@@ -3,10 +3,10 @@
 
 import re
 
-from cloudshell.cli.cli_service import CliService
+from ftos.command_templates import add_remove_vlan as vlan_command_template
+from ftos.command_templates import iface as iface_command_template
+
 from cloudshell.cli.command_template.command_template_executor import CommandTemplateExecutor
-from cloudshell.networking.cisco.command_templates import add_remove_vlan as vlan_command_template
-from cloudshell.networking.cisco.command_templates import iface as iface_command_template
 
 
 class AddRemoveVlanActions(object):
@@ -14,7 +14,7 @@ class AddRemoveVlanActions(object):
         """ Add remove vlan
 
         :param cli_service: config mode cli_service
-        :type cli_service: CliService
+        :type cli_service: cloudshell.cli.cli_service.CliService
         :param logger:
         :type logger: Logger
         :return:

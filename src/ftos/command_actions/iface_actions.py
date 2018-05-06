@@ -4,9 +4,9 @@
 import re
 
 from cloudshell.cli.command_template.command_template_executor import CommandTemplateExecutor
-from cloudshell.networking.cisco.command_templates import iface as iface_command_template
-from cloudshell.networking.cisco.command_templates import add_remove_vlan as vlan_command_template
-from cloudshell.networking.cisco.command_templates import configuration
+from ftos.command_templates import iface as iface_command_template
+from ftos.command_templates import add_remove_vlan as vlan_command_template
+from ftos.command_templates import configuration
 
 
 class IFaceActions(object):
@@ -23,25 +23,7 @@ class IFaceActions(object):
         self._cli_service = cli_service
         self._logger = logger
 
-    def get_port_name(self, port):
-        """ Get port name from port resource full name
 
-        :param port: port resource full address (PerfectSwitch/Chassis 0/FastEthernet0-23)
-        :return: port name (FastEthernet0/23)
-        :rtype: string
-        """
-
-        if not port:
-            err_msg = 'Failed to get port name.'
-            self._logger.error(err_msg)
-            raise Exception('get_port_name', err_msg)
-
-        temp_port_name = port.split('/')[-1]
-        if 'port-channel' not in temp_port_name.lower():
-            temp_port_name = temp_port_name.replace('-', '/')
-
-            self._logger.info('Interface name validation OK, portname = {0}'.format(temp_port_name))
-        return temp_port_name
 
     def get_current_interface_config(self, port_name, action_map=None, error_map=None):
         """Retrieve current interface configuration

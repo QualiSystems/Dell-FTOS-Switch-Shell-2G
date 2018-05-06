@@ -32,79 +32,86 @@ class FTOSEnableSnmpFlow(EnableSnmpFlow):
             self._logger.error(message)
             raise Exception(self.__class__.__name__, message)
 
-        if isinstance(snmp_parameters, SNMPV3Parameters):
-            self._enable_snmp_v3(snmp_parameters)
-        else:
-            self._enable_snmp(snmp_parameters)
+        with self._cli_handler.enable_mode_session() as enable_session:
+            snmp_actions = EnableDisableSnmpActions(enable_session, self._cli_handler.config_mode, self._logger)
+            if isinstance(snmp_parameters, SNMPV3Parameters):
+                self._enable_snmp_v3(snmp_parameters, snmp_actions)
+            else:
+                self._enable_snmp(snmp_parameters, snmp_actions)
 
-        self._verify_snmp(snmp_parameters)
+            self._verify(snmp_parameters)
 
-    def _enable_snmp(self, snmp_parameters):
+    def _enable_snmp(self, snmp_parameters, snmp_actions):
+        """
+        :type snmp_parameters: cloudshell.snmp.snmp_parameters.SNMPParameters
+        :type snmp_actions: ftos.command_actions.enable_disable_snmp_actions.EnableDisableSnmpActions
+        """
 
         if isinstance(snmp_parameters, SNMPV2WriteParameters):
             read_only_community = False
         else:
             read_only_community = True
 
-        with self._cli_handler.enable_mode_session() as enable_session:
-            snmp_actions = EnableDisableSnmpActions(enable_session, self._cli_handler.config_mode, self._logger)
-            current_snmp_communities = snmp_actions.get_current_snmp_config()
-            snmp_community = snmp_parameters.snmp_community
-            if not re.search("snmp-server community {}".format(snmp_parameters.snmp_community),
-                             current_snmp_communities):
-                snmp_actions.enable_snmp(snmp_community, read_only_community)
+        current_snmp_communities = snmp_actions.get_current_snmp_config()
+        snmp_community = snmp_parameters.snmp_community
+        if not re.search("snmp-server community {}".format(snmp_parameters.snmp_community),
+                         current_snmp_communities):
+            snmp_actions.enable_snmp(snmp_community, read_only_community)
+        else:
+            self._logger.debug("SNMP Community '{}' already configured".format(snmp_community))
+
+    def _enable_snmp_v3(self, snmp_parameters, snmp_actions):
+        """
+        :type snmp_parameters: cloudshell.snmp.snmp_parameters.SNMPV3Parameters
+        :type snmp_actions: ftos.command_actions.enable_disable_snmp_actions.EnableDisableSnmpActions
+        """
+        current_snmp_users = snmp_actions.get_snmp_users()
+        if snmp_parameters.snmp_user not in current_snmp_users:
+            self._validate_snmp_v3_params(snmp_parameters)
+            if self._create_group:
+                current_snmp_config = snmp_actions.get_current_snmp_config()
+                if "snmp-server view {}".format(self.DEFAULT_SNMP_VIEW) not in current_snmp_config:
+                    snmp_actions.enable_snmp_view(snmp_view=self.DEFAULT_SNMP_VIEW)
+                if "snmp-server group {}".format(self.DEFAULT_SNMP_GROUP) not in current_snmp_config:
+                    snmp_actions.enable_snmp_group(snmp_group=self.DEFAULT_SNMP_GROUP,
+                                                   snmp_view=self.DEFAULT_SNMP_VIEW)
+                snmp_actions.enable_snmp_v3(snmp_user=snmp_parameters.snmp_user,
+                                            snmp_password=snmp_parameters.snmp_password,
+                                            auth_protocol=self.SNMP_AUTH_MAP[
+                                                snmp_parameters.auth_protocol].lower(),
+                                            priv_protocol=self.SNMP_PRIV_MAP[
+                                                snmp_parameters.private_key_protocol].lower(),
+                                            snmp_priv_key=snmp_parameters.snmp_private_key,
+                                            snmp_group=self.DEFAULT_SNMP_GROUP)
             else:
-                self._logger.debug("SNMP Community '{}' already configured".format(snmp_community))
+                priv_protocol = self.SNMP_PRIV_MAP[snmp_parameters.private_key_protocol].lower()
+                if priv_protocol == "des":
+                    priv_protocol = ""
+                snmp_actions.enable_snmp_v3(snmp_user=snmp_parameters.snmp_user,
+                                            snmp_password=snmp_parameters.snmp_password,
+                                            auth_protocol=self.SNMP_AUTH_MAP[
+                                                snmp_parameters.auth_protocol].lower(),
+                                            priv_protocol=priv_protocol,
+                                            snmp_priv_key=snmp_parameters.snmp_private_key,
+                                            snmp_group=None)
 
-    def _enable_snmp_v3(self, snmp_parameters):
-        with self._cli_handler.enable_mode_session() as enable_session:
-            snmp_actions = EnableDisableSnmpActions(enable_session, self._cli_handler.config_mode, self._logger)
-            current_snmp_users = snmp_actions.get_snmp_users()
-            if snmp_parameters.snmp_user not in current_snmp_users:
-                self._validate_snmp_v3_params(snmp_parameters)
-                if self._create_group:
-                    current_snmp_config = snmp_actions.get_current_snmp_config()
-                    if "snmp-server view {}".format(self.DEFAULT_SNMP_VIEW) not in current_snmp_config:
-                        snmp_actions.enable_snmp_view(snmp_view=self.DEFAULT_SNMP_VIEW)
-                    if "snmp-server group {}".format(self.DEFAULT_SNMP_GROUP) not in current_snmp_config:
-                        snmp_actions.enable_snmp_group(snmp_group=self.DEFAULT_SNMP_GROUP,
-                                                       snmp_view=self.DEFAULT_SNMP_VIEW)
-                    snmp_actions.enable_snmp_v3(snmp_user=snmp_parameters.snmp_user,
-                                                snmp_password=snmp_parameters.snmp_password,
-                                                auth_protocol=self.SNMP_AUTH_MAP[
-                                                    snmp_parameters.auth_protocol].lower(),
-                                                priv_protocol=self.SNMP_PRIV_MAP[
-                                                    snmp_parameters.private_key_protocol].lower(),
-                                                snmp_priv_key=snmp_parameters.snmp_private_key,
-                                                snmp_group=self.DEFAULT_SNMP_GROUP)
-                else:
-                    priv_protocol = self.SNMP_PRIV_MAP[snmp_parameters.private_key_protocol].lower()
-                    if priv_protocol == "des":
-                        priv_protocol = ""
-                    snmp_actions.enable_snmp_v3(snmp_user=snmp_parameters.snmp_user,
-                                                snmp_password=snmp_parameters.snmp_password,
-                                                auth_protocol=self.SNMP_AUTH_MAP[
-                                                    snmp_parameters.auth_protocol].lower(),
-                                                priv_protocol=priv_protocol,
-                                                snmp_priv_key=snmp_parameters.snmp_private_key,
-                                                snmp_group=None)
-
-    def _verify_snmp(self, snmp_parameters):
+    def _verify(self, snmp_parameters, snmp_actions):
+        """
+        :type snmp_parameters: cloudshell.snmp.snmp_parameters.SNMPParameters
+        :type snmp_actions: ftos.command_actions.enable_disable_snmp_actions.EnableDisableSnmpActions
+        """
         self._logger.info("Start verification of SNMP config")
-        with self._cli_handler.config_mode_session() as config_session:
-            # Reentering config mode to perform commit for IOS-XR
-            snmp_actions = EnableDisableSnmpActions(config_session, self._cli_handler.config_mode, self._logger)
-            if isinstance(snmp_parameters, SNMPV3Parameters):
-                updated_snmp_users = snmp_actions.get_snmp_users()
-                if snmp_parameters.snmp_user not in updated_snmp_users:
-                    raise Exception(self.__class__.__name__, "Failed to create SNMP v3 Configuration." +
-                                    " Please check Logs for details")
-            else:
-                updated_snmp_communities = snmp_actions.get_current_snmp_config()
-                if not re.search("snmp-server community {}".format(snmp_parameters.snmp_community),
-                                 updated_snmp_communities):
-                    raise Exception(self.__class__.__name__, "Failed to create SNMP community." +
-                                    " Please check Logs for details")
+        if isinstance(snmp_parameters, SNMPV3Parameters):
+            updated_snmp_users = snmp_actions.get_snmp_users()
+            if snmp_parameters.snmp_user not in updated_snmp_users:
+                raise Exception(self.__class__.__name__, "Failed to create SNMP v3 Configuration." +
+                                " Please check Logs for details")
+        else:
+            updated_snmp_communities = snmp_actions.get_current_snmp_config()
+            if not re.search("snmp-server community {}".format(snmp_parameters.snmp_community),
+                             updated_snmp_communities):
+                raise Exception(self.__class__.__name__, "Failed to create SNMP community." +
+                                " Please check Logs for details")
 
     def _validate_snmp_v3_params(self, snmp_v3_params):
         message = "Failed to enable SNMP v3: "

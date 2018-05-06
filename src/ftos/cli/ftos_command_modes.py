@@ -1,76 +1,47 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from collections import OrderedDict
-import re
-import time
-
 from cloudshell.cli.command_mode import CommandMode
 
 
-class DefaultCommandMode(CommandMode):
+class FTOSCommandMode(CommandMode):
+    PROMPT = ''
+    ENTER_COMMAND = ''
+    EXIT_COMMAND = ''
+
+    def __init__(self, prompt=None, enter_command=None, exit_command=None, enter_action_map=None, exit_action_map=None,
+                 enter_error_map=None, exit_error_map=None):
+        super(FTOSCommandMode, self).__init__(prompt or self.PROMPT,
+                                              enter_command=enter_command or self.ENTER_COMMAND,
+                                              exit_command=exit_command or self.EXIT_COMMAND,
+                                              enter_action_map=enter_action_map,
+                                              exit_action_map=exit_action_map,
+                                              enter_error_map=enter_error_map,
+                                              exit_error_map=exit_error_map)
+
+
+class DefaultCommandMode(FTOSCommandMode):
     PROMPT = r'^.+>\s*$'
     ENTER_COMMAND = ''
     EXIT_COMMAND = ''
 
     def __init__(self, resource_config, api):
-        """
-        Initialize Default command mode, only for cases when session started not in enable mode
-
-        :param resource_config:
-        """
-
+        super(DefaultCommandMode, self).__init__()
         self.resource_config = resource_config
         self._api = api
 
-        CommandMode.__init__(self,
-                             DefaultCommandMode.PROMPT,
-                             DefaultCommandMode.ENTER_COMMAND,
-                             DefaultCommandMode.EXIT_COMMAND,
-                             enter_action_map=self.enter_action_map(),
-                             exit_action_map=self.exit_action_map(),
-                             enter_error_map=self.enter_error_map(),
-                             exit_error_map=self.exit_error_map())
 
-    def enter_action_map(self):
-        return OrderedDict()
-
-    def enter_error_map(self):
-        return OrderedDict()
-
-    def exit_action_map(self):
-        return OrderedDict()
-
-    def exit_error_map(self):
-        return OrderedDict()
-
-
-class EnableCommandMode(CommandMode):
+class EnableCommandMode(FTOSCommandMode):
     PROMPT = r'^.+#\s*$'
     ENTER_COMMAND = 'enable'
     EXIT_COMMAND = ''
 
     def __init__(self, resource_config, api):
-        """
-        Initialize Enable command mode - default command mode for Cisco Shells
-
-        :param resource_config:
-        """
-
         self.resource_config = resource_config
         self._api = api
         self._enable_password = None
+        super(EnableCommandMode, self).__init__(enter_action_map=self.enter_action_map())
 
-        CommandMode.__init__(self,
-                             EnableCommandMode.PROMPT,
-                             EnableCommandMode.ENTER_COMMAND,
-                             EnableCommandMode.EXIT_COMMAND,
-                             enter_action_map=self.enter_action_map(),
-                             exit_action_map=self.exit_action_map(),
-                             enter_error_map=self.enter_error_map(),
-                             exit_error_map=self.exit_error_map())
-
-    @property
     def enable_password(self):
         if not self._enable_password:
             password = self.resource_config.enable_password
@@ -78,76 +49,18 @@ class EnableCommandMode(CommandMode):
         return self._enable_password
 
     def enter_action_map(self):
-        return {"[Pp]assword": lambda session, logger: session.send_line(self.enable_password, logger)}
-
-    def enter_error_map(self):
-        return OrderedDict()
-
-    def exit_action_map(self):
-        return OrderedDict()
-
-    def exit_error_map(self):
-        return OrderedDict()
+        return {"[Pp]assword": lambda session, logger: session.send_line(self.enable_password(), logger)}
 
 
-class ConfigCommandMode(CommandMode):
-    MAX_ENTER_CONFIG_MODE_RETRIES = 5
-    ENTER_CONFIG_RETRY_TIMEOUT = 5
+class ConfigCommandMode(FTOSCommandMode):
     PROMPT = r'^.*\(conf.*\)#\s*$'
     ENTER_COMMAND = 'configure terminal'
     EXIT_COMMAND = "exit"
-    ENTER_ACTION_COMMANDS = []
 
     def __init__(self, resource_config, api):
-        """
-        Initialize Config command mode
-
-        :param resource_config:
-        """
-
         self.resource_config = resource_config
         self._api = api
-
-        CommandMode.__init__(self,
-                             ConfigCommandMode.PROMPT,
-                             ConfigCommandMode.ENTER_COMMAND,
-                             ConfigCommandMode.EXIT_COMMAND,
-                             enter_action_map=self.enter_action_map(),
-                             exit_action_map=self.exit_action_map(),
-                             enter_error_map=self.enter_error_map(),
-                             exit_error_map=self.exit_error_map())
-
-    def enter_action_map(self):
-        return {r"{}.*$".format(EnableCommandMode.PROMPT): self._check_config_mode}
-
-    def enter_error_map(self):
-        return OrderedDict()
-
-    def exit_error_map(self):
-        return OrderedDict()
-
-    def exit_action_map(self):
-        return {self.PROMPT: lambda session, logger: session.send_line('exit', logger)}
-
-    def enter_actions(self, cli_service):
-        for cmd in self.ENTER_ACTION_COMMANDS:
-            cli_service.send_command(cmd)
-
-    def _check_config_mode(self, session, logger):
-        error_message = "Failed to enter config mode, please check logs, for details"
-        output = session.hardware_expect("", expected_string="{0}|{1}".format(EnableCommandMode.PROMPT,
-                                                                              ConfigCommandMode.PROMPT),
-                                         logger=logger)
-        retry = 0
-        while (not re.search(ConfigCommandMode.PROMPT, output)) and retry < self.MAX_ENTER_CONFIG_MODE_RETRIES:
-            output = session.hardware_expect(ConfigCommandMode.ENTER_COMMAND,
-                                             expected_string="{0}|{1}".format(EnableCommandMode.PROMPT,
-                                                                              ConfigCommandMode.PROMPT),
-                                             logger=logger)
-            time.sleep(self.ENTER_CONFIG_RETRY_TIMEOUT)
-            retry += 1
-        if not re.search(ConfigCommandMode.PROMPT, output):
-            raise Exception(error_message)
+        super(ConfigCommandMode, self).__init__()
 
 
 CommandMode.RELATIONS_DICT = {
@@ -157,3 +70,31 @@ CommandMode.RELATIONS_DICT = {
         }
     }
 }
+
+
+# Detached command modes
+
+class InterfaceConfigCommandMode(FTOSCommandMode):
+    PROMPT = '^.*\(conf-if-.+\)#\s*$'
+    ENTER_COMMAND_TEMPLATE = 'interface {}'
+    EXIT_COMMAND = 'exit'
+
+    def __init__(self, interface_name):
+        super(InterfaceConfigCommandMode, self).__init__(
+            enter_command=self.ENTER_COMMAND_TEMPLATE.format(interface_name))
+
+
+class VlanConfigCommandMode(InterfaceConfigCommandMode):
+    ENTER_COMMAND_TEMPLATE = 'interface vlan {}'
+
+    def __init__(self, vlan_id):
+        super(InterfaceConfigCommandMode, self).__init__(
+            enter_command=self.ENTER_COMMAND_TEMPLATE.format(vlan_id))
+
+
+class PCConfigCommandMode(InterfaceConfigCommandMode):
+    ENTER_COMMAND_TEMPLATE = 'interface port-channel {}'
+
+    def __init__(self, port_channel_id):
+        super(InterfaceConfigCommandMode, self).__init__(
+            enter_command=self.ENTER_COMMAND_TEMPLATE.format(port_channel_id))
