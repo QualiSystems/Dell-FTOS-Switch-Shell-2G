@@ -1,3 +1,5 @@
+import os
+
 from cloudshell.devices.driver_helper import get_logger_with_thread_id, get_api, get_cli
 from cloudshell.devices.standards.networking.configuration_attributes_structure import \
     create_networking_resource_from_context
@@ -15,7 +17,7 @@ from ftos.snmp.ftos_snmp_handler import FTOSSnmpHandler
 
 class DellFtosSwitchShell2GDriver(ResourceDriverInterface, NetworkingResourceDriverInterface, GlobalLock):
     SUPPORTED_OS = [r"dell.+os"]
-    SHELL_NAME = "Dell FTOS Switch 2G"
+    SHELL_NAME = "Dell Ftos Switch 2G"
 
     def __init__(self):
         """
@@ -230,8 +232,8 @@ class DellFtosSwitchShell2GDriver(ResourceDriverInterface, NetworkingResourceDri
         snmp_handler = FTOSSnmpHandler(resource_config, logger, api, cli_handler)
 
         autoload_operations = FTOSAutoloadRunner(logger=logger,
-                                             resource_config=resource_config,
-                                             snmp_handler=snmp_handler)
+                                                 resource_config=resource_config,
+                                                 snmp_handler=snmp_handler)
         logger.info('Autoload started')
         response = autoload_operations.discover()
         logger.info('Autoload completed')
@@ -252,3 +254,9 @@ class DellFtosSwitchShell2GDriver(ResourceDriverInterface, NetworkingResourceDri
         This is a good place to close any open sessions, finish writing to log files
         """
         pass
+    #
+    # def _context_to_str(self, context):
+    #     cont_str = ""
+    #     for key, value in context.resource.attributes.items():
+    #         cont_str + "{}: {}".format(key, value) + os.linesep
+    #     return cont_str
